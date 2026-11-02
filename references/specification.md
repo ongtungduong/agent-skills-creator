@@ -56,7 +56,7 @@ metadata:
 
 | Field           | Required | Constraints |
 | --------------- | -------- | ----------- |
-| `name`          | Yes      | Max 64 chars. Lowercase letters, numbers, hyphens only. No leading/trailing hyphen. |
+| `name`          | Yes      | Max 64 chars. Unicode lowercase letters, numbers, hyphens only. No leading/trailing hyphen. |
 | `description`   | Yes      | Max 1024 chars. Non-empty. What the skill does and when to use it. |
 | `license`       | No       | License name or reference to a bundled license file. |
 | `compatibility` | No       | Max 500 chars. Environment requirements (intended product, system packages, network access, etc.). |
@@ -66,13 +66,13 @@ metadata:
 ### `name`
 
 - 1–64 characters
-- Only lowercase alphanumeric characters (`a-z`, `0-9`) and hyphens (`-`)
+- Only unicode lowercase alphanumeric characters (e.g. `a-z`, `0-9`, `é`) and hyphens (`-`)
 - Must not start or end with a hyphen
 - Must not contain consecutive hyphens (`--`)
 - **Must match the parent directory name**
 
-Valid: `pdf-processing`, `data-analysis`, `code-review`
-Invalid: `PDF-Processing` (uppercase), `-pdf` (leading hyphen), `pdf--processing` (consecutive hyphens)
+Valid: `pdf-processing`, `data-analysis`, `code-review`, `café`
+Invalid: `PDF-Processing` (uppercase), `Café` (uppercase), `-pdf` (leading hyphen), `pdf--processing` (consecutive hyphens)
 
 ### `description`
 
@@ -155,11 +155,17 @@ Supported languages depend on the agent implementation; Python, Bash, and JavaSc
 
 ### `references/`
 
-Additional documentation agents read when needed — e.g. `REFERENCE.md`, `FORMS.md`, or domain-specific files (`finance.md`, `legal.md`). Keep individual files focused; agents load them on demand, so smaller files mean less context use. Include a table of contents in files over ~300 lines.
+Additional documentation agents read when needed — e.g. `REFERENCE.md`, `FORMS.md`, or domain-specific files (`finance.md`, `legal.md`). Keep individual files focused; agents load them on demand, so smaller files mean less context use. (This skill's recommendation, not a spec rule: add a table of contents to files over ~300 lines.)
 
 ### `assets/`
 
 Static resources: templates (document/configuration), images (diagrams, examples), data files (lookup tables, schemas).
+
+## Locations and trust
+
+Besides client-specific directories, many clients also scan `.agents/skills/` (project level) and `~/.agents/skills/` (user level) as a cross-client convention, so a skill placed there is discoverable by several agents.
+
+Treat skills as executable influence: a project-level skill from an untrusted repository can inject instructions into the agent. Review `SKILL.md` and everything in `scripts/` before running or trusting a skill, and pin dependency versions in bundled scripts.
 
 ## Progressive disclosure
 

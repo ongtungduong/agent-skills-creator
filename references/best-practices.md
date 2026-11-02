@@ -184,4 +184,4 @@ The `description` is the primary triggering mechanism — the only text visible 
 - State **what** the skill does AND **when** to use it, in the same field. All "when to use" information belongs in the description, not the body.
 - Include the concrete keywords, file types, and phrasings real user requests would contain.
 - Agents tend to *under*-trigger skills, so lean pushy: "Use whenever the user mentions X, Y, Z — even if they don't explicitly ask for W."
-- Test triggering against both should-trigger prompts (varied phrasings, casual/typo'd wording, cases that don't name the skill) and near-miss should-NOT-trigger prompts (adjacent domains sharing keywords). See https://agentskills.io/skill-creation/optimizing-descriptions for a systematic loop.
+- Test triggering against both should-trigger prompts (varied phrasings, casual/typo'd wording, cases that don't name the skill) and near-miss should-NOT-trigger prompts (adjacent domains sharing keywords). See https://agentskills.io/skill-creation/optimizing-descriptions for a systematic loop, and https://agentskills.io/skill-creation/evaluating-skills for evaluating whether the skill improves results.

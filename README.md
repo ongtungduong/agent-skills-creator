@@ -48,7 +48,7 @@ The agent only loads content when needed — keeping context overhead minimal an
 ## Frontmatter
 
 ```yaml
-name: your-skill-name         # Required: kebab-case, 1–64 chars, MUST match directory name
+name: your-skill-name         # Required: unicode lowercase + hyphens, 1–64 chars, MUST match directory name
 description: What + when...   # Required: 1–1024 chars, clearly states what skill does and when to use it
 license: MIT                   # Optional
 compatibility: Requires ...    # Optional, ≤500 chars — only for actual environment constraints
@@ -58,14 +58,14 @@ metadata:                      # Optional: flat string->string map, no nesting
 allowed-tools: Bash(git:*) Read # Optional, experimental
 ```
 
-`name` cannot contain uppercase letters, spaces, leading/trailing hyphens, or double hyphens (`--`). Full details: [references/specification.md](references/specification.md).
+`name` allows unicode lowercase letters, digits and hyphens (e.g. `café`); it cannot contain uppercase letters, spaces, leading/trailing hyphens, or double hyphens (`--`). Full details: [references/specification.md](references/specification.md).
 
 ## Validator
 
 `scripts/validate_skill.py <skill-dir> [--json]` — Built with Python stdlib, no external dependencies.
 
-- **Errors (blocking)**: Missing `SKILL.md` · invalid YAML frontmatter · missing or invalid `name`/`description` · `name` does not match directory name · `compatibility` > 500 characters · `metadata` is not a flat string map.
-- **Warnings (non-blocking)**: Unknown frontmatter fields · body > 500 lines · reference to non-existent files in `scripts/`, `references/`, or `assets/`.
+- **Errors (blocking)**: Missing `SKILL.md` · invalid YAML frontmatter · missing or invalid `name`/`description` · `name` does not match directory name · `compatibility` > 500 characters · non-UTF-8/unreadable `SKILL.md` · `metadata` is not a flat string map (nested mappings and unquoted number/boolean/null values are rejected; other YAML types are not detected by the minimal parser). Supports folded/literal block scalars (`>`, `>-`, `|`, `|-`).
+- **Warnings (non-blocking)**: Unknown frontmatter fields · body > 500 lines · reference to non-existent files in `scripts/`, `references/`, or `assets/` · references containing `..` or escaping the skill directory.
 
 ## Skill Writing Principles
 
@@ -102,4 +102,4 @@ Describe specific issues (spec discrepancies, validator bugs, missing instructio
 MIT. See frontmatter in `SKILL.md`.
 
 ---
-**Author**: ongtungduong · **Version**: 1.0 · **Updated**: 2026-08-13 · Spec: [agentskills.io/specification](https://agentskills.io/specification)
+**Author**: ongtungduong · **Version**: 1.0 · **Updated**: 2026-11-02 · Spec: [agentskills.io/specification](https://agentskills.io/specification)

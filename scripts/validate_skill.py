@@ -4,11 +4,12 @@
 Usage: python validate_skill.py <path-to-skill-directory> [--json]
 
 Checks (errors fail validation, warnings do not):
-  errors:   SKILL.md present, frontmatter well-formed, name/description present
+  errors:   SKILL.md present and UTF-8, frontmatter well-formed, name/description present
             and within constraints, name matches directory, compatibility <= 500
             chars, metadata is a flat string->string map
   warnings: unknown frontmatter fields, body over 500 lines, referenced
-            scripts//references//assets/ paths that do not exist
+            scripts//references//assets/ paths that do not exist or escape
+            the skill directory (`..`)
 
 Exit codes: 0 = valid, 1 = validation errors, 2 = usage error.
 Requires only the Python standard library.
@@ -18,59 +19,109 @@ import re
 import sys
 from pathlib import Path
 
-NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 KNOWN_FIELDS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
+BLOCK_SCALARS = {">", ">-", "|", "|-"}
+NON_STRING_RE = re.compile(r"^(true|false|null|~|[-+]?\d+(\.\d+)?)$", re.IGNORECASE)
+
+
+def valid_name_chars(name):
+    """Unicode lowercase alphanumerics and hyphens; no leading/trailing/double hyphen."""
+    if name.startswith("-") or name.endswith("-") or "--" in name:
+        return False
+    return all(ch == "-" or (ch.isalnum() and ch == ch.lower() and not ch.isupper()) for ch in name)
 
 
 def parse_frontmatter(text):
     """Parse the YAML frontmatter subset the spec uses.
 
-    Handles top-level `key: value` scalars and one nested mapping level
-    (for `metadata:`). Returns (dict, error_string_or_None).
+    Handles top-level `key: value` scalars, folded (`>`, `>-`) and literal
+    (`|`, `|-`) block scalars, and one nested mapping level (for `metadata:`).
+    Returns (dict, error_or_None, body_start_line_index, non_string_meta_keys).
+    Values are always strings; unquoted numbers/booleans/null inside a nested
+    mapping are reported in non_string_meta_keys.
     """
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
-        return None, "SKILL.md must start with a '---' frontmatter delimiter on line 1"
+        return None, "SKILL.md must start with a '---' frontmatter delimiter on line 1", 0, []
     end = None
     for i in range(1, len(lines)):
         if lines[i].strip() == "---":
             end = i
             break
     if end is None:
-        return None, "frontmatter opening '---' has no closing '---'"
+        return None, "frontmatter opening '---' has no closing '---'", 0, []
 
     data = {}
+    non_string = []
     current_map_key = None
-    for raw in lines[1:end]:
+    map_indent = None
+    i = 1
+    while i < end:
+        raw = lines[i]
+        i += 1
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
         indent = len(raw) - len(raw.lstrip())
         line = raw.strip()
         if ":" not in line:
-            return None, f"cannot parse frontmatter line: {raw!r}"
+            return None, f"cannot parse frontmatter line: {raw!r}", end + 1, non_string
         key, _, value = line.partition(":")
         key, value = key.strip(), value.strip()
-        # strip matching quotes
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        if indent == 0 and value in BLOCK_SCALARS:
+            block = []
+            while i < end and (not lines[i].strip() or lines[i][0] in " \t"):
+                block.append(lines[i])
+                i += 1
+            while block and not block[-1].strip():
+                block.pop()
+            pad = min((len(b) - len(b.lstrip()) for b in block if b.strip()), default=0)
+            block = [b[pad:].rstrip() if b.strip() else "" for b in block]
+            if value[0] == ">":
+                paras, cur = [], []
+                for b in block:
+                    if b:
+                        cur.append(b.strip())
+                    else:
+                        paras.append(" ".join(cur))
+                        cur = []
+                paras.append(" ".join(cur))
+                text_value = "\n".join(paras)
+            else:
+                text_value = "\n".join(block)
+            data[key] = text_value if value.endswith("-") or not text_value else text_value + "\n"
+            current_map_key = None
+            continue
+        quoted = len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'"
+        if quoted:
             value = value[1:-1]
         if indent == 0:
             if value == "":
                 data[key] = {}
                 current_map_key = key
+                map_indent = None
             else:
                 data[key] = value
                 current_map_key = None
         else:
             if current_map_key is None:
-                return None, f"unexpected indented frontmatter line: {raw!r}"
+                return None, f"unexpected indented frontmatter line: {raw!r}", end + 1, non_string
+            if map_indent is None:
+                map_indent = indent
+            elif indent != map_indent:
+                return None, f"nested mapping not allowed under {current_map_key!r}: {raw!r}", end + 1, non_string
+            if value == "":
+                non_string.append(key)
+            elif not quoted and NON_STRING_RE.match(value):
+                non_string.append(key)
             data[current_map_key][key] = value
-    return data, None
+    return data, None, end + 1, non_string
 
 
 def find_missing_references(body, skill_dir):
-    """Return referenced scripts//references//assets/ paths that don't exist."""
-    missing = []
+    """Return (missing, escaping) lists of referenced scripts//references//assets/ paths."""
+    missing, escaping = [], []
     seen = set()
+    root = skill_dir.resolve()
     for match in re.finditer(r"(?:scripts|references|assets)/[A-Za-z0-9_./-]+", body):
         rel = match.group(0).rstrip(".")
         if rel in seen:
@@ -79,9 +130,12 @@ def find_missing_references(body, skill_dir):
         # skip obvious placeholders/examples containing wildcard-ish tokens
         if "*" in rel or "<" in rel:
             continue
-        if not (skill_dir / rel).exists():
+        target = (skill_dir / rel).resolve()
+        if ".." in rel.split("/") or not target.is_relative_to(root):
+            escaping.append(rel)
+        elif not target.exists():
             missing.append(rel)
-    return missing
+    return missing, escaping
 
 
 def validate(skill_dir):
@@ -94,8 +148,11 @@ def validate(skill_dir):
     if not skill_md.is_file():
         return [f"missing required file: {skill_md}"], []
 
-    text = skill_md.read_text(encoding="utf-8")
-    fm, err = parse_frontmatter(text)
+    try:
+        text = skill_md.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError) as exc:
+        return [f"cannot read {skill_md} as UTF-8 text: {exc}"], []
+    fm, err, body_start, non_string_meta = parse_frontmatter(text)
     if err:
         return [err], []
 
@@ -106,10 +163,10 @@ def validate(skill_dir):
     else:
         if len(name) > 64:
             errors.append(f"'name' exceeds 64 characters ({len(name)})")
-        if not NAME_RE.match(name):
+        if not valid_name_chars(name):
             errors.append(
-                f"'name' ({name!r}) must contain only lowercase a-z, 0-9 and single "
-                "hyphens, and must not start or end with a hyphen"
+                f"'name' ({name!r}) must contain only unicode lowercase letters, digits "
+                "and single hyphens, and must not start or end with a hyphen"
             )
         if name != skill_dir.resolve().name:
             errors.append(
@@ -136,6 +193,11 @@ def validate(skill_dir):
     meta = fm.get("metadata")
     if meta is not None and not isinstance(meta, dict):
         errors.append("'metadata' must be a mapping of string keys to string values")
+    elif meta and non_string_meta:
+        errors.append(
+            "'metadata' values must be strings; quote these values: "
+            + ", ".join(repr(k) for k in non_string_meta)
+        )
 
     # allowed-tools / license type sanity
     for field in ("allowed-tools", "license"):
@@ -148,8 +210,7 @@ def validate(skill_dir):
             warnings.append(f"unknown frontmatter field {key!r} (not defined by the spec)")
 
     # body length
-    body_start = text.splitlines().index("---", 1) if "---" in text.splitlines()[1:] else 0
-    body_lines = text.splitlines()[body_start + 1:]
+    body_lines = text.splitlines()[body_start:]
     if len(body_lines) > 500:
         warnings.append(
             f"SKILL.md body is {len(body_lines)} lines; the spec recommends under 500 "
@@ -159,8 +220,11 @@ def validate(skill_dir):
     if not body.strip():
         warnings.append("SKILL.md has no body content after the frontmatter")
 
-    for rel in find_missing_references(body, skill_dir):
+    missing, escaping = find_missing_references(body, skill_dir)
+    for rel in missing:
         warnings.append(f"SKILL.md references {rel!r} but that path does not exist")
+    for rel in escaping:
+        warnings.append(f"SKILL.md reference {rel!r} escapes skill directory")
 
     return errors, warnings
 

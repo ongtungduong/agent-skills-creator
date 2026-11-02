@@ -50,7 +50,7 @@ The frontmatter rules are strict — validate them exactly. Full field-by-field 
 
 The two required fields:
 
-- **`name`** — 1–64 chars, only lowercase `a-z`, `0-9`, and hyphens; must not start/end with a hyphen or contain `--`; **must equal the skill's directory name**.
+- **`name`** — 1–64 chars, only unicode lowercase letters, digits (`a-z`, `0-9`, `é`…), and hyphens; must not start/end with a hyphen or contain `--`; **must equal the skill's directory name**.
 - **`description`** — 1–1024 chars. Must state both *what the skill does* and *when to use it*, with the concrete keywords a user's request would contain. This is the only text the agent sees when deciding to activate the skill, so make it slightly pushy: enumerate trigger phrases, file types, and situations. "Helps with PDFs" is a failing description; "Extracts text and tables from PDF files, fills forms, merges PDFs. Use when working with PDF documents or when the user mentions PDFs, forms, or document extraction" passes.
 
 Optional fields: `license`, `compatibility` (≤500 chars, only for real environment requirements — most skills don't need it), `metadata` (string→string map, e.g. author/version), `allowed-tools` (experimental).
@@ -86,7 +86,7 @@ Reread the draft as if you were an agent seeing it cold, mid-task, with a full c
 - Is anything present that you'd already know without the skill? Cut it.
 - Are ALL-CAPS MUSTs standing in for missing explanations? Replace with the reason.
 
-Then, if possible, refine with real execution: run the skill against 2–3 realistic tasks and feed the traces back. Wasted agent turns usually mean instructions are vague, inapplicable, or offer too many options.
+Then, if possible, refine with real execution: run the skill against 2–3 realistic tasks and feed the traces back. See [evaluating skills](https://agentskills.io/skill-creation/evaluating-skills) and [optimizing descriptions](https://agentskills.io/skill-creation/optimizing-descriptions) for systematic loops. Wasted agent turns usually mean instructions are vague, inapplicable, or offer too many options.
 
 ## Output checklist
 
